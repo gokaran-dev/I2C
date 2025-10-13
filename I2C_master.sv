@@ -95,6 +95,9 @@ module I2C_master (
 		case (state)
 			SEND_ADDR: begin
 				sda_oe  <= 1;
+
+				if (addr_bit == 7)
+					addr_reg <= {sub_addr, rw}; 
 	
 				if (SCL == 0) //SDA is sampled only when SCL is low
 				begin
@@ -114,6 +117,9 @@ module I2C_master (
 
 			SEND_DATA: begin
 				sda_oe <= 1;
+
+				if (data_bit == 7)
+					data_reg <= data_in;
 
 				if (SCL == 0)
 				begin
@@ -139,6 +145,7 @@ module I2C_master (
 					data_reg[data_bit] <= SDA;
 					
 					if (data_bit == 0)
+						data_out <= data_reg;
 						next_state <= MASTER_ACK;
 
 					else
@@ -193,8 +200,7 @@ module I2C_master (
 
 			START: begin
 				sda_out = 0;
-				sda_oe = 1;
-				addr_reg = {sub_addr, rw}; //having this in combinational block can cause timing issues. 
+				sda_oe = 1; 
 				data_reg = 0; //can have possible timing issues
 				next_state = SEND_ADDR;
 			end
