@@ -1,10 +1,14 @@
-//I2C Master Module, work in progress
+//I2C Master Module, work in progress.
+//0------> ACK
+//1------> NACK
+//next_byte logic is not implemented yet. Thinking of making this a parameter.
 
 module I2C_master (
 	input  logic clk,
 	input  logic rst_n,
 	input  logic rw,
 	input  logic start_txn,
+	input  logic next_byte, //currently testing only for 1 byte of data
 	input  logic [6:0] sub_addr,
 	input  logic [7:0] data_in,
 	input  logic data_valid,
@@ -17,7 +21,14 @@ module I2C_master (
 	inout  logic SDA
 	);
 
+	
+	logic scl_en, scl_reg;
 
+	logic [2:0] addr_bit = 7; 
+	logic [2:0] data_bit = 7;
+
+	assign SDA = (sda_oe) ? sda_out : 1'bz; 
+	
 	typedef enum logic [3:0] {
 		IDLE,
 		START,
@@ -32,7 +43,31 @@ module I2C_master (
 
 	state_t state, next_state;
 
+		
+	//generation of SCL using a clk_400 which will be a 400KHz clock
+	//derieved using IPs
+	
+	//SCL generation
 	always_ff @(posedge clk)
+	begin
+		if (!rst_n)
+		begin
+			scl_reg <= 1; //At ideal SCL is pulled HIGH
+		end
+		elseif (!scl_en)
+		begin
+			scl_reg <= 0;
+		end
+		else
+		begin
+			scl_reg <= ~scl_reg;
+		end
+	end
+
+	assign SCL = scl_reg;
+
+	//handling sending/receiving of data and address
+	always_ff @(posedge clk_400)
 	begin
 		if (!rst_n)
 			begin
@@ -42,7 +77,6 @@ module I2C_master (
 				busy <= 0;
 				done <= 0;
 				ack_error <= 0;
-				SCL <= 1;
 				sda_out <= 1;
 				sda_oe <= 0;
 			end
@@ -50,14 +84,102 @@ module I2C_master (
 			state <= next_state;
 	end
 
+	//Sending, receiving of data from master. Sending Address from master.
+	always_ff @(posedge clk_400)
+	begin
+		if (!rst_n)
+		begin
+			addr_bit <= 7;
+		end
+
+		case (state)
+			SEND_ADDR: begin
+				sda_oe  <= 1;
+	
+				if (SCL == 0) //SDA is sampled only when SCL is low
+				begin
+					sda_out <= addr_reg[7];
+
+					if (addr_bit == 0)
+						next_state <= WAIT_ACK_ADDR;
+					else
+					begin
+						addr_reg <= addr_reg << 1; //shift address reg left
+						addr_bit <= addr_bit - 1;
+						next_state <= SEND_ADDR;
+					end
+				end
+
+			end
+
+			SEND_DATA: begin
+				sda_oe <= 1;
+
+				if (SCL == 0)
+				begin
+					sda_out <= data_reg[7];
+
+					if (data_bit == 0)
+						next_state <= WAIT_ACK_DATA;
+					else
+					begin
+						data_reg <= data_reg << 1; //shift data reg left
+						data_bit <= data_bit - 1;
+						next_state <= SEND_DATA;
+					end
+				end
+
+			end
+			
+			RECEIVE_DATA: begin
+				sda_oe <= 0;
+
+				if (SCL == 1)
+				begin
+					data_reg[data_bit] <= SDA;
+					
+					if (data_bit == 0)
+						next_state <= MASTER_ACK;
+
+					else
+					begin
+						data_bit <= data_bit - 1;
+						next_state <= RECEIVE_DATA;
+					end
+				end
+			end
+
+			MASTER_ACK: begin
+				sda_oe <= 1;   //Master takes control of SDA
+				sda_out <= 0; //acknowledge receiving of 1 byte.
+
+				if (SCL == 0)
+				begin
+					if (next_byte)
+					begin
+						data_bit <= 7;
+						next_state <= RECEIVE_DATA;
+					end
+
+					else
+						next_state <= STOP;
+				end
+
+
+			end
+		endcase
+
+	end
+
 	
 
+	//FSM for I2C
 	always_combo 
 	begin
 		next_state = state;
 		sda_out = 1;
 		sda_oe = 0;
-		budy = 0;
+		busy = 0;
 		done = 0;
 
 		case (state)
@@ -72,22 +194,13 @@ module I2C_master (
 			START: begin
 				sda_out = 0;
 				sda_oe = 1;
-				shift_reg = {sub_addr, rw};
+				addr_reg = {sub_addr, rw}; //having this in combinational block can cause timing issues. 
+				data_reg = 0; //can have possible timing issues
 				next_state = SEND_ADDR;
 			end
 
-			SEND_ADDR: begin
-				sda_out = shift_reg[7]; //7 bit address
-				sda_oe = 1;
-
-				if (addr_bit == 0)
-				begin
-					next_state = WAIT_ACK_ADDR;
-				end	
-			end
-
-			WAIT_ACK_ADDR: begin
-				sda_oe = 0;
+			WAIT_ACK_ADDR: begin //subordinate acknowledgment
+				sda_oe = 0; //control is given to subordinate
 
 				if (SDA == 0) //acknowledgment received 
 				begin
@@ -107,49 +220,18 @@ module I2C_master (
 					next_state = STOP;
 				end
 			end
-
-			SEND_DATA: begin
-				sda_out = shift_reg [7];
-				sda_oe = 1;
-
-				if (data_bits == 0 && scl_falling)
-				begin
-					next_state = WAIT_ACK_DATA;
-				end
-			end
 			
 			WAIT_ACK_DATA: begin
 				sda_oe = 0;
 
 				if (SDA == 0)
-				begin
-					if (data_valid) 
-					begin
-						next_state = SEND_DATA;
-					end
-
-					else
-						next_state = STOP;
-				end
+					next_state = SEND_DATA; //goes to send next byte if there is any
 
 				else
+				begin
+					ack_error = 1;
 					next_state = STOP;
-			end
-
-			RECEIVE_DATA: begin
-				sda_oe = 0;
-
-				if (data_bits == 
-					0)
-					next_state = MASTER_ACK;
-			end
-
-			MASTER_ACK: begin
-				sda_out = next_byte ? 0 : 1;
-				sda_oe = 1;
-				
-				//when and how do we go to stop?
-				next_state = STOP;
+				end
 			end
 
 			STOP: begin
