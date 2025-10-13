@@ -3,6 +3,8 @@
 //1------> NACK
 //next_byte logic is not implemented yet. Thinking of making this a parameter.
 
+`timescale 1ns/1ps
+
 module I2C_master (
 	input  logic clk,
 	input  logic rst_n,
