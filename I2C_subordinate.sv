@@ -3,15 +3,18 @@
 `timescale 1ns/1ps
 
 module I2C_subordinate (
-		input logic clk,
+		input logic clk_400,
 		input logic rst_n,
 		input logic SCL,
+		input logic next_byte,
 		inout tri   SDA,
 		
 		input  logic [7:0] addr, //address for the subordinate.
 		input  logic [7:0] data_in, //data we want to send
 		output logic [7:0] data_out, //data we want to receive 
 		output logic data_ready,
+		output logic done,
+		output logic busy,
 		output logic ack_error
 	);
 
@@ -38,7 +41,7 @@ module I2C_subordinate (
 	
 	assign SDA = sda_oe ? sda_out : 1'bz;
 
-	always_ff @(posedge SCL)
+	always_ff @(posedge clk_400)
 	begin
 		if (!rst_n)
 		begin
@@ -54,38 +57,40 @@ module I2C_subordinate (
 			state <= next_state;
 	end
 	
-	always_ff @(posedge SCL)
+	always_ff @(posedge clk_400)
 	begin
 		case (state)
 			ADDR_RX: begin
-				addr_reg[addr_bit] <= SDA;
+				if (SCL == 1)
+					addr_reg[addr_bit] <= SDA;
 
 				if (addr_bit == 0)
-					state <= ADDR_ACK;
+					next_state <= ADDR_ACK;
 				else 
 				begin
-					addr_bit = addr_bit - 1;
-					state <= ADDR_RX;
+					addr_bit <= addr_bit - 1;
+					next_state <= ADDR_RX;
 				end
 			end
 
 			SEND_DATA: begin
 				sda_oe <= 1;
-				sda_out <= data_in[7];
 
 				if (data_bit == 7)
-					data_reg == data_in;
+					data_reg <= data_in;
 
 				if (SCL == 0)
 				begin
-					data_reg = data_reg << 1;
+					sda_out <= data_reg[7];
+					data_reg <= data_reg << 1;
+
 					if (data_bit == 0)
-						state <= DATA_ACK;
+						next_state <= DATA_ACK;
 
 					else
 					begin
-						data_bit = data_bit - 1;
-						state = SEND_DATA;
+						data_bit <= data_bit - 1;
+						next_state <= SEND_DATA;
 					end
 						
 				end
@@ -115,11 +120,21 @@ module I2C_subordinate (
 			DATA_ACK: begin
 				sda_oe <= 1;
 				sda_out <= 0;
+
+				if (next_byte)
+					begin
+						if (addr[0] == 0)
+							next_state <= RECEIVE_DATA;
+						else if (addr[0]==1)
+							next_state <= SEND_DATA;
+					end
+				else
+					next_state <= STOP;
 			end
 		endcase
 	end
 
-	always_combo
+	always_comb
 	begin
 		sda_out = 1;
 		sda_oe = 0;
@@ -129,7 +144,7 @@ module I2C_subordinate (
 		case(state)
 			IDLE: begin
 				if (SDA == 0 && SCL == 1)
-					state = START;
+					next_state = START;
 			end
 
 			START: begin
@@ -140,18 +155,26 @@ module I2C_subordinate (
 			end
 
 			ADDR_ACK: begin
-				if (addr == my_addr)
+				if (addr[7:1] == my_addr)
 				begin
 					sda_oe = 1;
 					sda_out = 0; //acknowledge
 
 					if (addr[0] == 0) //master writing to subordinate
-						state = RECEIVE_DATA;
+						next_state = RECEIVE_DATA;
 					
-					elseif (addr[0] == 1) //master reading from subordinate
-						state = SEND_DATA;
+					else if (addr[0] == 1) //master reading from subordinate
+						next_state = SEND_DATA;
 				end
 			end
+
+			STOP: begin
+				sda_oe <= 0;
+				busy <= 1;
+				done <= 1;
+				next_state <= IDLE;
+			end
+
 		endcase
 	end
 

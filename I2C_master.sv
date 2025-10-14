@@ -6,7 +6,7 @@
 `timescale 1ns/1ps
 
 module I2C_master (
-	input  logic clk,
+	input  logic clk_400,
 	input  logic rst_n,
 	input  logic rw,
 	input  logic start_txn,
@@ -20,11 +20,13 @@ module I2C_master (
 	output logic done,
 	output logic ack_error,
 	output logic SCL,
-	inout  logic SDA
+	inout  tri   SDA
 	);
 
+	logic [7:0] addr_reg, data_reg;
 	
 	logic scl_en, scl_reg;
+	logic sda_oe, sda_out;
 
 	logic [2:0] addr_bit = 7; 
 	logic [2:0] data_bit = 7;
@@ -35,7 +37,7 @@ module I2C_master (
 		IDLE,
 		START,
 		SEND_ADDR,
-		WAIT_ACK_ADD,
+		WAIT_ACK_ADDR,
 		SEND_DATA,
 		WAIT_ACK_DATA,
 		RECEIVE_DATA,
@@ -50,16 +52,18 @@ module I2C_master (
 	//derieved using IPs
 	
 	//SCL generation
-	always_ff @(posedge clk)
+	always_ff @(posedge clk_400)
 	begin
 		if (!rst_n)
 		begin
 			scl_reg <= 1; //At ideal SCL is pulled HIGH
 		end
-		elseif (!scl_en)
+		
+		else if (!scl_en)
 		begin
 			scl_reg <= 0;
 		end
+		
 		else
 		begin
 			scl_reg <= ~scl_reg;
@@ -147,9 +151,11 @@ module I2C_master (
 					data_reg[data_bit] <= SDA;
 					
 					if (data_bit == 0)
+					begin
 						data_out <= data_reg;
 						next_state <= MASTER_ACK;
-
+                    end
+                    
 					else
 					begin
 						data_bit <= data_bit - 1;
@@ -180,10 +186,8 @@ module I2C_master (
 
 	end
 
-	
-
 	//FSM for I2C
-	always_combo 
+	always_comb
 	begin
 		next_state = state;
 		sda_out = 1;
@@ -217,7 +221,7 @@ module I2C_master (
 
 					else 
 					begin
-						data_bits = 7;
+						data_bit = 7;
 						next_state = RECEIVE_DATA;
 					end
 				end
