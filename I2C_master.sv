@@ -12,9 +12,8 @@ module I2C_master (
 	input  logic start_txn,
 	input  logic next_byte, //currently testing only for 1 byte of data
 	input  logic [6:0] sub_addr,
-	input  logic [7:0] data_in,
-	input  logic data_valid,
-	output logic [7:0] data_out,
+	input  logic [7:0] data_in, //data we are sending to subordinate
+	output logic [7:0] data_out, //data we are reading from subordinate
 	output logic data_ready,
 	output logic busy,
 	output logic done,
@@ -61,7 +60,7 @@ module I2C_master (
 		
 		else if (!scl_en)
 		begin
-			scl_reg <= 0;
+			scl_reg <= 1;
 		end
 		
 		else
@@ -96,9 +95,29 @@ module I2C_master (
 		if (!rst_n)
 		begin
 			addr_bit <= 7;
+			data_bit <= 7;
+			scl_en <= 0;
 		end
 
-		case (state)
+		case (state)  
+		    IDLE: begin
+		      sda_out <= 1;
+		      sda_oe  <= 1;
+		      scl_en <= 0;
+		      busy <= 0;
+		      done <= 0;
+		    end 
+		    
+		    START: begin
+		        busy <= 1;
+		    	sda_out <= 0;
+				sda_oe <= 1; 
+				scl_en <= 1;
+		      	data_reg <= 0;
+		      	addr_bit <= 7;
+		      	data_bit <= 7; 
+		    end
+		    
 			SEND_ADDR: begin
 				sda_oe  <= 1;
 
@@ -109,35 +128,45 @@ module I2C_master (
 				begin
 					sda_out <= addr_reg[7];
 
-					if (addr_bit == 0)
-						next_state <= WAIT_ACK_ADDR;
-					else
+					if (addr_bit != 0)
 					begin
 						addr_reg <= addr_reg << 1; //shift address reg left
 						addr_bit <= addr_bit - 1;
-						next_state <= SEND_ADDR;
 					end
 				end
 
+			end
+			
+			WAIT_ACK_ADDR: begin
+			   sda_oe = 0; //control is given to subordinate
+			     
+			   if (SCL == 1)
+			   begin 
+			         if (SDA == 0)
+			         begin
+			             if (rw == 1)
+			                 data_bit <= 7;  
+			         end
+			         
+			         else
+			             ack_error <= 1;
+			   end
 			end
 
 			SEND_DATA: begin
 				sda_oe <= 1;
 
 				if (data_bit == 7)
-					data_reg <= data_in;
+					data_reg <= data_in; 
 
 				if (SCL == 0)
 				begin
 					sda_out <= data_reg[7];
-
-					if (data_bit == 0)
-						next_state <= WAIT_ACK_DATA;
-					else
+					
+                    if (data_bit != 0)
 					begin
 						data_reg <= data_reg << 1; //shift data reg left
 						data_bit <= data_bit - 1;
-						next_state <= SEND_DATA;
 					end
 				end
 
@@ -150,38 +179,42 @@ module I2C_master (
 				begin
 					data_reg[data_bit] <= SDA;
 					
-					if (data_bit == 0)
+					if (data_bit == 0) 
 					begin
 						data_out <= data_reg;
-						next_state <= MASTER_ACK;
+                        data_ready <= 1;
                     end
                     
 					else
 					begin
 						data_bit <= data_bit - 1;
-						next_state <= RECEIVE_DATA;
+					    data_ready <= 0;
 					end
 				end
 			end
-
+            
+            WAIT_ACK_DATA: begin
+                sda_oe <= 0;
+            end
+            
 			MASTER_ACK: begin
 				sda_oe <= 1;   //Master takes control of SDA
 				sda_out <= 0; //acknowledge receiving of 1 byte.
-
-				if (SCL == 0)
-				begin
-					if (next_byte)
-					begin
-						data_bit <= 7;
-						next_state <= RECEIVE_DATA;
-					end
-
-					else
-						next_state <= STOP;
+                
+                if (next_byte)
+                    data_bit <= 7;
 				end
-
-
+				
+			STOP: begin
+			    sda_out <= 1;
+				sda_oe <= 1;
+				done <= 1;
+				scl_en <= 0;
+			
 			end
+				
+			default: 
+			     scl_en <= 0;
 		endcase
 
 	end
@@ -189,31 +222,25 @@ module I2C_master (
 	//FSM for I2C
 	always_comb
 	begin
-		next_state = state;
-		sda_out = 1;
-		sda_oe = 0;
-		busy = 0;
-		done = 0;
-
+	    next_state = state;
+	    
 		case (state)
 			IDLE: begin
 				if (start_txn) 
-				begin
 					next_state = START;
-					busy = 1;
-				end
 			end
 
 			START: begin
-				sda_out = 0;
-				sda_oe = 1; 
-				data_reg = 0; //can have possible timing issues
 				next_state = SEND_ADDR;
+			end
+			
+			SEND_ADDR: begin
+			     if (addr_bit == 0)
+					   next_state = WAIT_ACK_ADDR;
+			
 			end
 
 			WAIT_ACK_ADDR: begin //subordinate acknowledgment
-				sda_oe = 0; //control is given to subordinate
-
 				if (SDA == 0) //acknowledgment received 
 				begin
 					if (rw == 0) 
@@ -221,21 +248,27 @@ module I2C_master (
 
 					else 
 					begin
-						data_bit = 7;
 						next_state = RECEIVE_DATA;
 					end
 				end
 
 				else
 				begin
-					ack_error = 1;
 					next_state = STOP;
 				end
 			end
 			
+			SEND_DATA: begin			
+					if (data_bit == 0)
+						next_state = WAIT_ACK_DATA;
+			end
+			
+			RECEIVE_DATA: begin
+			     if (data_bit == 0)
+						next_state = MASTER_ACK;
+			end
+			
 			WAIT_ACK_DATA: begin
-				sda_oe = 0;
-
 				if (SDA == 0)
 					next_state = SEND_DATA; //goes to send next byte if there is any
 
@@ -245,16 +278,23 @@ module I2C_master (
 					next_state = STOP;
 				end
 			end
-
-			STOP: begin
-				sda_out = 1;
-				sda_oe = 1;
-				done = 1;
-				
-				next_state = IDLE;
+			
+			MASTER_ACK: begin
+				if (SCL == 0)
+				    begin
+					   if (next_byte)
+						  next_state = RECEIVE_DATA;
+					 end
+					 
+			    if (!next_byte)
+			         next_state = STOP;
 			end
 
-			default: next_state = IDLE;
+			STOP:
+				next_state = IDLE;
+
+			default:  
+			    next_state = IDLE;
 		endcase
 	end
 endmodule
