@@ -12,11 +12,12 @@ module slow_clock(
     logic locked;
     logic rst_n_pll;
     logic [4:0] count;
-    
-      clk_wiz_0 clock_PLL(
-            .clk_out1(clk_10), 
+      
+      
+        clk_wiz_0 clk_10_4(
+            .clk_out1(clk_10),    
             .resetn(rst_n), 
-            .locked(locked),   //clock is safely latched when locked is HIGH
+            .locked(locked),      
             .clk_in1(clk)     
         );
         
