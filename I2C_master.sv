@@ -14,7 +14,7 @@ module I2C_master (
     output logic done,
     output logic ack_error,
     output logic SCL,
-    output logic [2:0] state_out, 
+    //output logic [2:0] state_out, //only for debugging
    //output logic [2:0] data_bit, addr_bit, //this is only for debugging
     //output logic [7:0] addr_reg, data_reg, //only for debugging
     inout  tri   SDA
