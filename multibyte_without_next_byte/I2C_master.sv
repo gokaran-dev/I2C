@@ -5,6 +5,7 @@ module I2C_master (
     input  logic rst_n,
     input  logic rw,
     input  logic start_txn,
+    input  logic [7:0] next_byte_1, // Changed to 8-bit to be a counter
     input  logic [6:0] sub_addr,
     input  logic [7:0] data_in,
     output logic [7:0] data_out,
@@ -23,6 +24,8 @@ module I2C_master (
 
     logic scl_en, scl_reg;
     logic sda_oe, sda_out;
+    // **FIX 1: next_byte MUST be a multi-bit counter to be decremented.**
+    logic [7:0] next_byte;
     
     assign SDA = (sda_oe) ? sda_out : 1'bz; 
     
@@ -41,9 +44,8 @@ module I2C_master (
     state_t state, next_state;
     assign state_out = state[3:0];
     
-    
-    //SCL generation (Async Reset)
-    always_ff @(posedge clk_400, negedge rst_n)
+    //SCL generation
+    always_ff @(posedge clk_400) 
     begin
         if (!rst_n) begin
             scl_reg <= 1;
@@ -58,11 +60,17 @@ module I2C_master (
 
     assign SCL = scl_reg;
 
-    // Main FSM Sequential Block (Async Reset)
-    always_ff @(posedge clk_400, negedge rst_n)
+    always_ff @(posedge clk_400) 
+    begin
+        if (!rst_n)
+            state <= IDLE;
+        else
+            state <= next_state;
+    end
+
+    always_ff @(posedge clk_400) 
     begin
         if (!rst_n) begin
-            state <= IDLE;
             addr_bit <= 7;
             data_bit <= 7;
             scl_en <= 0;
@@ -75,19 +83,17 @@ module I2C_master (
             ack_error <= 0;
             sda_out <= 1;
             sda_oe <= 0;
-            last_addr_bit <= 0;
-            last_data_bit <= 0;
+            next_byte <= 0;
         end
         
         else 
         begin
-            state <= next_state;
             data_ready <= 0;
             
             case (state)  
                 IDLE: begin
                     sda_out <= 1;
-                    sda_oe  <= 1; // Drive high when idle
+                    sda_oe  <= 1;
                     scl_en <= 0;
                     busy <= 0;
                     done <= 0;
@@ -109,11 +115,14 @@ module I2C_master (
                     data_bit <= 7;
                     last_addr_bit <= 0;
                     last_data_bit <= 0;
-                    addr_reg <= {sub_addr, rw}; // Load address
+                    next_byte <= next_byte_1;
                 end
                 
                 SEND_ADDR: begin
                     sda_oe  <= 1;
+                    if (addr_bit == 7) 
+                        addr_reg <= {sub_addr, rw}; 
+   
                     if (SCL == 0) 
                     begin 
                         sda_out <= addr_reg[7];
@@ -123,20 +132,18 @@ module I2C_master (
                         end
                         else begin
                             last_addr_bit <= 1;
-                            sda_oe <= 0; // Release SDA for ACK
+                            sda_oe <= 0; 
                         end
                     end
                 end
                 
                 WAIT_ACK_ADDR: begin
-                   if (rw == 0)
-                            data_reg <= data_in; 
-                            
-                    last_addr_bit <= 0; // Reset flag
-                    if (SCL == 1) begin // Sample ACK
-                        if (SDA == 1) begin  
+                    if (SCL == 1) begin  
+                        if (SDA == 1) 
                             ack_error <= 1;
-                        end         
+                        
+                        if (rw == 0)
+                            data_reg <= data_in;                      
                     end
                 end
 
@@ -148,9 +155,10 @@ module I2C_master (
                             data_reg <= data_reg << 1;
                             data_bit <= data_bit - 1;
                         end
-                        else begin
+                        else 
+                        begin
                             last_data_bit <= 1;
-                            sda_oe <= 0; // Release SDA
+                            sda_oe <= 0;
                         end
                     end
                 end
@@ -158,35 +166,57 @@ module I2C_master (
                 RECEIVE_DATA: begin
                     sda_oe <= 0;
                     if (SCL == 1) begin
-                        data_reg <= {data_reg[6:0], SDA};
-                        if (data_bit == 0) begin
+                        data_reg <= {data_reg[6:0], SDA}; 
+                        if (data_bit == 0) 
+                        begin
                             data_ready <= 1;
                             last_data_bit <= 1; 
-                        end  
-                        else begin
+                        end                   
+                        else   
+                        begin
                             data_bit <= data_bit - 1;
                         end
                     end
                 end
                 
                 WAIT_ACK_DATA: begin
-                    last_data_bit <= 0; // Reset flag
-                    if (SCL == 1) begin   
-                        if (SDA == 1) begin
+                    if (SCL == 1) begin                      
+                        if (SDA == 1) 
                             ack_error <= 1;
+                    end
+                    // **FIX 2: Add the missing counter decrement for WRITE operations.**
+                    else begin // SCL is low, after ACK has been sampled.
+                        if (next_byte > 0) begin
+                            next_byte <= next_byte - 1;
+                            data_bit <= 7;
+                            last_data_bit <= 0;
+                            data_reg <= data_in; // In a real multi-byte, you'd load new data here
                         end
                     end
                 end
                 
                 MASTER_ACK: begin
-                    last_data_bit <= 0; // Reset flag
                     sda_oe <= 1;
-                    sda_out <= 1; // NACK
-                    if (SCL == 1) begin
-                        data_out <= data_reg;
+                    if (next_byte > 0) 
+                        sda_out <= 0; // ACK
+                    else 
+                        sda_out <= 1; // NACK for the last byte
+                    
+                    if (SCL == 1)
+                    begin
+                        if (last_data_bit)
+                            data_out <= data_reg;
+                    end
+                    else //at SCL == 0 
+                    begin
+                        if (next_byte > 0) begin
+                           next_byte <= next_byte - 1;
+                           data_bit <= 7;
+                           last_data_bit <= 0;
+                        end
                     end
                 end
-                        
+                       
                 STOP: begin
                     sda_oe <= 1;
                     if (SCL == 1) 
@@ -197,15 +227,14 @@ module I2C_master (
                     busy <= 0;
                     scl_en <= 0;
                 end
-                        
-                default: begin
+                       
+                default:
                     scl_en <= 0;
-                end
             endcase
         end
     end
 
-    // Master Combinational State Transitions (FIXED)
+    // Combinational Logic Block for State Transitions
     always_comb 
     begin
         next_state = state;
@@ -222,17 +251,16 @@ module I2C_master (
             end
             
             SEND_ADDR: begin
-                // **FIX 1: Transition using flag**
-                if (last_addr_bit)
+                if (SCL == 0 && last_addr_bit)
                     next_state = WAIT_ACK_ADDR;
             end
 
             WAIT_ACK_ADDR: begin
-                // **FIX 2: Wait for SCL to go LOW after ACK**
-                if (SCL == 0) begin  
-                    if (ack_error) // Check flag set on posedge
+                if (SCL == 1) begin  
+                    if (SDA == 1) 
                         next_state = STOP;
-                    else begin 
+                    else 
+                    begin 
                         if (rw == 0) 
                             next_state = SEND_DATA;
                         else 
@@ -241,28 +269,38 @@ module I2C_master (
                 end
             end
             
-            SEND_DATA: begin   
-                if (last_data_bit)  
+            SEND_DATA: begin    
+                if (last_data_bit && SCL == 0)  
                     next_state = WAIT_ACK_DATA;
             end
             
             RECEIVE_DATA: begin
-                if (last_data_bit)
+                if (last_data_bit && SCL == 0)
                     next_state = MASTER_ACK;
             end
             
             WAIT_ACK_DATA: begin   
-                // **FIX 3: Wait for SCL to go LOW**
-                if (SCL == 0) begin  
-                    next_state = STOP;
+                if (SCL == 1) begin  
+                    if (SDA == 1) 
+                        next_state = STOP;
+                    else 
+                    begin
+                        // **FIX 3: Base the decision on the counter value.**
+                        if (next_byte > 0)  
+                            next_state = SEND_DATA;
+                        else
+                            next_state = STOP;
+                    end
                 end
             end
             
             MASTER_ACK: begin
-                // **FIX 4: Wait for SCL to go LOW**
-                if (SCL == 0) 
+                if (SCL == 1) 
                 begin  
-                    next_state = STOP;
+                    if (next_byte > 0)
+                        next_state = RECEIVE_DATA;
+                    else
+                        next_state = STOP;
                 end
             end
 
@@ -276,3 +314,4 @@ module I2C_master (
         endcase
     end
 endmodule
+
