@@ -248,7 +248,7 @@ Demonstrates full data flow:
 ### How to run the script
 
 #### Prerequisites
-- Put `run_full_flow.tcl` and all source files (`*.sv`, `*.v`) in the same directory.
+- Put `run_full_flow.tcl` and all source files (from for_one_byte folder) (`*.sv`, `*.v`) in the same directory.
 
 #### GUI mode
 1. Open Vivado GUI.
@@ -272,7 +272,7 @@ Demonstrates full data flow:
 
 ## Notes
 
-- The I²C protocol is currently **verified for single-byte transactions** only.  
+- The I²C protocol is currently **verified for single-byte transactions** only.  (for_one_byte)
 - Multi-byte transaction support and burst read/write functionality will be implemented and verified in future updates.
 
 ---
