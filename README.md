@@ -2,22 +2,31 @@
 
 ## Table of Contents
 - [Overview](#overview)
+- [I²C Protocol Overview](#2-i²c-protocol-overview)
+  - [Basic Principles](#21-basic-principles)
+  - [Start and Stop Conditions](#start-and-stop-conditions)
+  - [Data Validity and Timing](#23-data-validity-and-timing)
+  - [Acknowledgement (ACK/NACK)](#24-acknowledgement-acknack)
+  - [Addressing and R/W Bit](#25-addressing-and-rw-bit)
+- [Design Schematic](#3-design-schematic)
+- [Detailed Design Description](#4-detailed-design-description)
+  - [Synchronization Mechanism](#41-synchronization-mechanism)
+  - [Timing and Clock Generation](#42-timing-and-clock-generation)
 - [System Architecture](#system-architecture)
-- [Top-Level (`I2C_system`)](#top-level)
-- [Clock Generation (`slow_clock`)](#clock-generation)
-- [I2C Master (`I2C_master`)](#i2c-master)
-- [I2C Subordinate (`I2C_subordinate`)](#i2c-subordinate)
-- [FIFO Integration (`Sync_FIFO`)](#fifo-integration)
+- [Top-Level (`I2C_system`)](#top-level-i2c_system)
+- [Clock Generation (`slow_clock`)](#clock-generation-slow_clock)
+- [I2C Master (`I2C_master`)](#i2c-master-i2c_master)
+- [I2C Subordinate (`I2C_subordinate`)](#i2c-subordinate-i2c_subordinate)
+- [FIFO Integration (`Sync_FIFO`)](#fifo-integration-sync_fifo)
 - [Outputs & Waveforms](#outputs--waveforms)
   - [1. Write Operations (Sub1 & Sub2)](#1-write-operations-sub1--sub2)
   - [2. Write & Read Operations](#2-write--read-operations)
   - [3. Write, Read & FIFO Operations](#3-write-read--fifo-operations)
-- [Synthesized Schematic](#synthesized-schematic)
-- [Vivado Automation Script](#vivado-automation-script-run_full_flowtcl)
+- [Vivado Automation Script](#vivado-automation-script)
   - [What the script does](#what-the-script-does)
   - [How to run the script](#how-to-run-the-script)
-    - [GUI mode (interactive)](#gui-mode-interactive)
-    - [Batch mode (automated)](#batch-mode-automated)
+    - [GUI mode](#gui-mode)
+    - [Vivado TCL Shell](#vivado-tcl-shell)
 - [References](#references)
 - [Notes](#notes)
 
@@ -241,14 +250,16 @@ Demonstrates full data flow:
 #### Prerequisites
 - Put `run_full_flow.tcl` and all source files (`*.sv`, `*.v`) in the same directory.
 
-#### GUI mode (interactive)
+#### GUI mode
 1. Open Vivado GUI.
 2. In the Tcl Console, change to project directory where all the files are stored. 
-3. Run: 'source run_full_flow.tcl'
-4. if running from terminal, navigate to where the project files are stored.
-5. Run: 'vivado -mode batch -source run_full_flow.tcl'
+3. Run: `source run_full_flow.tcl`
 
+#### Vivado TCL Shell
+1. If running from Vivado TCL Shell, navigate to where the project files are stored.
+2. Run: `vivado -mode batch -source run_full_flow.tcl`
 
+---
 
 ## References
 
