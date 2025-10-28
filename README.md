@@ -3,7 +3,6 @@
 ## Table of Contents
 - [Overview](#overview)
 - [System Architecture](#system-architecture)
-- [Design Hierarchy](#design-hierarchy)
 - [Top-Level (`I2C_system`)](#top-level)
 - [Clock Generation (`slow_clock`)](#clock-generation)
 - [I2C Master (`I2C_master`)](#i2c-master)
@@ -80,19 +79,14 @@ The subordinate compares the address on the bus to its own and responds with an 
 
 ---
 
-## 3. Design Hierarchy
-![Design](outputs/design.png)
-
----
-
-## 4. Design Schematic
+## 3. Design Schematic
 ![Schematic](outputs/schematic.png)
 
 ---
 
-## 5. Detailed Design Description
+## 4. Detailed Design Description
 
-### 5.1 Synchronization Mechanism
+### 4.1 Synchronization Mechanism
 Both Master and Subordinate modules implement **two-stage synchronizers** for the asynchronous SDA and SCL lines.  
 This ensures both FSMs interpret transitions consistently, avoiding metastability and timing mismatches.
 
@@ -102,7 +96,7 @@ The subordinate also operates using synchronized SCL/SDA signals, ensuring preci
 
 ---
 
-### 5.2 Timing and Clock Generation
+### 4.2 Timing and Clock Generation
 The `slow_clock` module divides the FPGA system clock to produce a 400 kHz signal used as the reference for SCL.  
 Both master and subordinate FSMs derive their internal transitions from this reference, ensuring deterministic timing.
 
@@ -220,11 +214,6 @@ Demonstrates full data flow:
 - **Master Read:** Master reads data from `sub2`.  
 - **Master FIFO:** `master_data_ready` pulses, pushing the data into `master_FIFO`.  
 - **FIFO Read:** The testbench asserts `sub1_fifo_read_en` and `master_fifo_read_en` to pop and verify data.
-
----
-
-## Synthesized Schematic
-![Schematic](outputs/schematic.png)
 
 ---
 
