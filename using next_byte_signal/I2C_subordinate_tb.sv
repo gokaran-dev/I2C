@@ -168,7 +168,7 @@ module I2C_subordinate_tb;
         if (master_ack_error == 0 && master_done == 1 && master_data_out == 8'hC3) begin
             $display("TEST PASSED! Subordinate correctly sent 0x%h to the master.", master_data_out);
         end else begin
-            $display("--> TEST FAILED: ack_error=%b, done=%b", master_ack_error, master_done);
+            $display("TEST FAILED! ack_error=%b, done=%b", master_ack_error, master_done);
             if (master_data_out !== 8'hC3) begin
                 $display("DATA MISMATCH! Master received 0x%h, expected 0xC3.", master_data_out);
             end
