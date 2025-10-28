@@ -9,23 +9,40 @@ module I2C_master (
     input  logic [7:0] data_in,
     output logic [7:0] data_out,
     output logic data_ready,
-    output logic busy,
-    output logic done,
-    output logic ack_error,
     output logic SCL,
+    inout  tri   SDA,    
+    output logic busy,
+    output logic done
+    
+    //only for debugging
+    /*output logic ack_error,
     output logic [3:0] state_out,
     output logic [2:0] data_bit, addr_bit,
     output logic [7:0] addr_reg, data_reg,
     output logic last_addr_bit,
-    output logic last_data_bit,
-    inout  tri   SDA
-);
-
+    output logic last_data_bit*/
+);   
+    logic ack_error;
+    logic [3:0] state_out;
+    logic [2:0] data_bit, addr_bit;
+    logic [7:0] addr_reg, data_reg;
+    logic last_addr_bit;
+    logic last_data_bit; 
+    
+    //while SCL is produced by Master, its FSM must be in sync with subordinate. 
+    //Therefore we add 2 step synchronizers for SCL signal, similar to subordinate.
+    logic SCL_sync, SCL_d;     
+    logic scl_posedge;
+    logic scl_negedge; 
+    
+    assign scl_posedge = (SCL_sync == 1'b1) && (SCL_d == 1'b0);
+    assign scl_negedge = (SCL_sync == 1'b0) && (SCL_d == 1'b1);
+    
     logic scl_en, scl_reg;
     logic sda_oe, sda_out;
-    
     assign SDA = (sda_oe) ? sda_out : 1'bz; 
     
+    //even after synchronising SCL, I observed Master FSM was running one clk_400 edge faster. So, Added extra state
     typedef enum logic [3:0] {
         IDLE,
         START,
@@ -33,16 +50,18 @@ module I2C_master (
         WAIT_ACK_ADDR,
         SEND_DATA,
         WAIT_ACK_DATA,
+        PRE_RECEIVE, 
         RECEIVE_DATA,
         MASTER_ACK,
+        DATA_VALID,     
+        PULSE_READY,    
         STOP
     } state_t;
 
     state_t state, next_state;
     assign state_out = state[3:0];
     
-    
-    //SCL generation (Async Reset)
+    //SCL generation
     always_ff @(posedge clk_400, negedge rst_n)
     begin
         if (!rst_n) begin
@@ -58,7 +77,7 @@ module I2C_master (
 
     assign SCL = scl_reg;
 
-    // Main FSM Sequential Block (Async Reset)
+    //FSM 
     always_ff @(posedge clk_400, negedge rst_n)
     begin
         if (!rst_n) begin
@@ -77,17 +96,23 @@ module I2C_master (
             sda_oe <= 0;
             last_addr_bit <= 0;
             last_data_bit <= 0;
+            SCL_sync <= 1'b1; 
+            SCL_d <= 1'b1;
         end
         
         else 
         begin
             state <= next_state;
-            data_ready <= 0;
+            data_ready <= 0; //Default to 0, only pulse for one cycle
+            
+            //two stage synchronizers for SCL
+            SCL_sync <= SCL;
+            SCL_d <= SCL_sync;
             
             case (state)  
                 IDLE: begin
                     sda_out <= 1;
-                    sda_oe  <= 1; // Drive high when idle
+                    sda_oe  <= 1; 
                     scl_en <= 0;
                     busy <= 0;
                     done <= 0;
@@ -109,95 +134,130 @@ module I2C_master (
                     data_bit <= 7;
                     last_addr_bit <= 0;
                     last_data_bit <= 0;
-                    addr_reg <= {sub_addr, rw}; // Load address
+                    addr_reg <= {sub_addr, rw}; 
                 end
                 
                 SEND_ADDR: begin
                     sda_oe  <= 1;
+                    
                     if (SCL == 0) 
                     begin 
                         sda_out <= addr_reg[7];
-                        if (addr_bit != 0) begin
+                        if (addr_bit != 0) 
+                        begin
                             addr_reg <= addr_reg << 1;
                             addr_bit <= addr_bit - 1;
                         end
-                        else begin
+                        
+                        else 
+                        begin
                             last_addr_bit <= 1;
-                            sda_oe <= 0; // Release SDA for ACK
+                            sda_oe <= 0; 
                         end
                     end
                 end
                 
                 WAIT_ACK_ADDR: begin
                    if (rw == 0)
-                            data_reg <= data_in; 
-                            
-                    last_addr_bit <= 0; // Reset flag
-                    if (SCL == 1) begin // Sample ACK
-                        if (SDA == 1) begin  
+                        data_reg <= data_in; 
+                        
+                    last_addr_bit <= 0; 
+                    if (SCL == 1) 
+                    begin 
+                        if (SDA == 1) 
+                        begin  
                             ack_error <= 1;
-                        end         
+                        end   
                     end
                 end
 
                 SEND_DATA: begin
                     sda_oe <= 1;
-                    if (SCL == 0) begin
+                    
+                    if (SCL == 0) 
+                    begin
                         sda_out <= data_reg[7];
-                        if (data_bit != 0) begin
+                        
+                        if (data_bit != 0) 
+                        begin
                             data_reg <= data_reg << 1;
                             data_bit <= data_bit - 1;
                         end
-                        else begin
+                        
+                        else 
+                        begin
                             last_data_bit <= 1;
-                            sda_oe <= 0; // Release SDA
+                            sda_oe <= 0; 
                         end
                     end
                 end
-                
-                RECEIVE_DATA: begin
+
+                PRE_RECEIVE: begin
+                    //deliberate extra state for properly synchronizing subordinate and Master FSMs
                     sda_oe <= 0;
-                    if (SCL == 1) begin
-                        data_reg <= {data_reg[6:0], SDA};
-                        if (data_bit == 0) begin
-                            data_ready <= 1;
+                end
+                
+                RECEIVE_DATA: 
+                begin
+                    sda_oe <= 0; 
+                    
+                    if (scl_posedge) 
+                    begin
+                        data_reg <= {data_reg[6:0], SDA}; 
+                        if (data_bit == 0) 
+                        begin
                             last_data_bit <= 1; 
                         end  
-                        else begin
+                        
+                        else 
+                        begin
                             data_bit <= data_bit - 1;
                         end
                     end
                 end
                 
                 WAIT_ACK_DATA: begin
-                    last_data_bit <= 0; // Reset flag
-                    if (SCL == 1) begin   
-                        if (SDA == 1) begin
+                    last_data_bit <= 0; 
+                    
+                    if (SCL == 1) 
+                    begin   
+                        if (SDA == 1) 
+                        begin 
                             ack_error <= 1;
                         end
                     end
                 end
                 
                 MASTER_ACK: begin
-                    last_data_bit <= 0; // Reset flag
-                    sda_oe <= 1;
-                    sda_out <= 1; // NACK
-                    if (SCL == 1) begin
-                        data_out <= data_reg;
-                    end
+                    last_data_bit <= 0; 
+                    
+                    sda_oe <= 1; 
+                    sda_out <= 1; //NACK: Since we are only sending 1 byte.                   
                 end
-                        
+                
+                DATA_VALID: begin
+                    //another extra state so valid data is loaded into data_out
+                    data_out <= data_reg;
+                end
+                
+                PULSE_READY: begin
+                //another state which is meant to pulse data ready one edge after so data_out is ready 
+                    data_ready <= 1'b1;
+                end
+                                
                 STOP: begin
                     sda_oe <= 1;
+                    
                     if (SCL == 1) 
-                        sda_out <= 1;
+                        sda_out <= 1; 
                     else 
-                        sda_out <= 0;
+                        sda_out <= 0; 
+                        
                     done <= 1;
                     busy <= 0;
-                    scl_en <= 0;
+                    scl_en <= 0; 
                 end
-                        
+                                
                 default: begin
                     scl_en <= 0;
                 end
@@ -205,7 +265,7 @@ module I2C_master (
         end
     end
 
-    // Master Combinational State Transitions (FIXED)
+    //Next state transitions
     always_comb 
     begin
         next_state = state;
@@ -217,28 +277,34 @@ module I2C_master (
             end
 
             START: begin
-                if (SCL == 0)
+                if (SCL == 0) 
                     next_state = SEND_ADDR;
             end
             
             SEND_ADDR: begin
-                // **FIX 1: Transition using flag**
                 if (last_addr_bit)
                     next_state = WAIT_ACK_ADDR;
             end
 
             WAIT_ACK_ADDR: begin
-                // **FIX 2: Wait for SCL to go LOW after ACK**
-                if (SCL == 0) begin  
-                    if (ack_error) // Check flag set on posedge
+                if (scl_negedge) 
+                begin  
+                    if (ack_error) 
                         next_state = STOP;
-                    else begin 
-                        if (rw == 0) 
-                            next_state = SEND_DATA;
-                        else 
-                            next_state = RECEIVE_DATA;
+                        
+                    else 
+                    begin 
+                        if (rw == 0) //Master Writes to subordinate
+                            next_state = SEND_DATA; 
+                            
+                        else //Master reads from subordinate for rw = 1
+                            next_state = PRE_RECEIVE; 
                     end
                 end
+            end
+
+            PRE_RECEIVE: begin
+                next_state = RECEIVE_DATA; 
             end
             
             SEND_DATA: begin   
@@ -252,18 +318,24 @@ module I2C_master (
             end
             
             WAIT_ACK_DATA: begin   
-                // **FIX 3: Wait for SCL to go LOW**
-                if (SCL == 0) begin  
+                if (scl_negedge) begin  
                     next_state = STOP;
                 end
             end
             
             MASTER_ACK: begin
-                // **FIX 4: Wait for SCL to go LOW**
-                if (SCL == 0) 
-                begin  
-                    next_state = STOP;
+                if (scl_negedge) 
+                begin                   
+                    next_state = DATA_VALID;
                 end
+            end
+
+            DATA_VALID: begin
+                next_state = PULSE_READY;
+            end
+            
+            PULSE_READY: begin
+                next_state = STOP;
             end
 
             STOP: begin
