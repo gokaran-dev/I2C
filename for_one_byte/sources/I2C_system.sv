@@ -3,7 +3,7 @@
 module I2C_system(
     input  logic clk,
     input  logic rst_n,   
-    //output logic       clk_400, //use this pin to get clk_400 in TB
+    output logic       clk_400, //use this pin to get clk_400 in TB
 
     inout  tri SDA,
     inout  tri SCL, 
@@ -12,8 +12,8 @@ module I2C_system(
     input  logic start_txn,
     input  logic rw,
     output logic master_data_ready,
-    //output logic master_busy, //Should be exposed for TB Verification 
-    //output logic master_done, //Should be exposed for TB Verification 
+    output logic master_busy, //Should be exposed for TB Verification 
+    output logic master_done, //Should be exposed for TB Verification 
     input  logic [6:0] sub_addr,
     input  logic [7:0] master_data_in,
     output logic [7:0] master_data_out,
@@ -77,7 +77,7 @@ module I2C_system(
     
 );
     
-    logic clk_400; 
+    //logic clk_400; 
     //debug signals should be enabled in I2C_Master and I2C_subordinate modules
     
     //Master debug signals

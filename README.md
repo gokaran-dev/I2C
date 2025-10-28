@@ -13,6 +13,11 @@
   - [2. Write & Read Operations](#2-write--read-operations)
   - [3. Write, Read & FIFO Operations](#3-write-read--fifo-operations)
 - [Synthesized Schematic](#synthesized-schematic)
+- [Vivado Automation Script](#vivado-automation-script-run_full_flowtcl)
+  - [What the script does](#what-the-script-does)
+  - [How to run the script](#how-to-run-the-script)
+    - [GUI mode (interactive)](#gui-mode-interactive)
+    - [Batch mode (automated)](#batch-mode-automated)
 - [References](#references)
 - [Notes](#notes)
 
@@ -216,6 +221,34 @@ Demonstrates full data flow:
 - **FIFO Read:** The testbench asserts `sub1_fifo_read_en` and `master_fifo_read_en` to pop and verify data.
 
 ---
+
+## Vivado Automation Script
+
+### What the script does
+- Creates a new Vivado project named `I2C_Protocol` for `xc7z020clg484-1`
+- Adds source files (design SV files and testbench).
+- Runs synthesis (`synth_1`) and waits for completion.
+- Captures the post-synthesis utilization report (`post_synth_utilization.rpt`).
+- Prints DSPs, LUTs and FFs used.
+- Launches a post-synthesis functional simulation (XSIM).
+- Prints the utilization summary to the Tcl console.
+- Behavior:
+  - GUI mode: leaves project and windows open for inspection.
+  - Batch mode: closes project and exits Vivado on completion.
+
+### How to run the script
+
+#### Prerequisites
+- Put `run_full_flow.tcl` and all source files (`*.sv`, `*.v`) in the same directory.
+
+#### GUI mode (interactive)
+1. Open Vivado GUI.
+2. In the Tcl Console, change to project directory where all the files are stored. 
+3. Run: 'source run_full_flow.tcl'
+4. if running from terminal, navigate to where the project files are stored.
+5. Run: 'vivado -mode batch -source run_full_flow.tcl'
+
+
 
 ## References
 
