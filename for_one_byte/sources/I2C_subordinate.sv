@@ -25,24 +25,24 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
     output logic rw,
     output logic last_data_bit_done,
     output logic last_addr_bit_done,
-    output logic addr_match*/
+    output logic addr_match */
 );
     
-    logic done;
-    logic busy;
-    logic [2:0] addr_bit; 
-    logic [2:0] data_bit; 
-    logic [3:0] state_out;
-    logic [7:0] addr_reg; 
-    logic [7:0] data_reg;
-    logic ack_error;
-    logic SCL_d;
-    logic scl_posedge;
-    logic scl_negedge;
-    logic rw;
-    logic last_data_bit_done;
-    logic last_addr_bit_done;
-    logic addr_match;
+   logic done;
+   logic busy;
+   logic [2:0] addr_bit; 
+   logic [2:0] data_bit; 
+   logic [3:0] state_out;
+   logic [7:0] addr_reg; 
+   logic [7:0] data_reg;
+   logic ack_error;
+   logic SCL_d;
+   logic scl_posedge;
+   logic scl_negedge;
+   logic rw;
+   logic last_data_bit_done;
+   logic last_addr_bit_done;
+   logic addr_match;
     
     //added data_valid stage so data_out is properly latched and a data_ready signal is generated one clk_400 later.  
     typedef enum logic [3:0] {
@@ -69,7 +69,7 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
     
     //SDA falling while SCL is high
     assign start_cond = (SDA_sync == 1'b0) && (SDA_d == 1'b1) && (SCL_d == 1'b1);
-    //SDA rising while SCL is high. I also ensure that we do not go to IDLE accidentally
+    //SDA rising while SCL is high. I also ensure that we do not go to IDLE accidentally. 
     assign stop_cond  = (((SDA_sync == 1'b1) && (SDA_d == 1'b0) && (SCL_d == 1'b1)) && (state != SEND_DATA));
     
     

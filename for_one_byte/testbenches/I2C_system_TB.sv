@@ -14,7 +14,7 @@ module I2C_system_TB;
     logic [7:0] sub1_data_in = 8'h00; 
     logic [7:0] sub2_data_in = 8'h00;
 
-    logic  clk_400; // Connects to DUT's clk_400 output
+    logic  clk_400; 
 
     //I2C main signals
     logic [7:0] master_data_out;
@@ -38,8 +38,9 @@ module I2C_system_TB;
     logic [7:0] master_fifo_data_out;
 
     //Debugg signals
-
-  /*logic       master_ack_error;
+    /*
+    logic       scl_en,scl_reg;
+    logic       master_ack_error;
     logic [3:0] master_state;
     logic [2:0] master_addr_bit;
     logic [2:0] master_data_bit;
@@ -73,12 +74,11 @@ module I2C_system_TB;
     
     logic  sub2_fifo_full;
     logic  sub1_fifo_full;
-    logic  master_fifo_full;*/
+    logic  master_fifo_full;
+    */
 
-    // External I2C bus lines
     tri SDA;
-    tri SCL;
-
+    tri SCL; 
 
     pullup(SDA);
     pullup(SCL);
@@ -124,6 +124,8 @@ module I2C_system_TB;
         //Debugging ports
         /*
         // Master debug ports
+	.scl_en(scl_en),  
+        .scl_reg(scl_reg), 
         .master_ack_error (master_ack_error),
         .master_state (master_state),
         .master_addr_bit (master_addr_bit),
@@ -156,13 +158,13 @@ module I2C_system_TB;
         .sub2_state (sub2_state),
         .sub2_last_addr_bit_done (sub2_last_addr_bit_done),
         .sub2_last_data_bit_done (sub2_last_data_bit_done),
-        .sub2_SCL_d (sub2_SCL_d),
+        .sub2_SCL_d (sub2_SCL_d)
         
         // FIFO debug ports
         .sub2_fifo_full (sub2_fifo_full),
         .sub1_fifo_full (sub1_fifo_full),
-        .master_fifo_full (master_fifo_full)
-        */
+        .master_fifo_full (master_fifo_full) */
+        
     );
 
     always #5 clk = ~clk;

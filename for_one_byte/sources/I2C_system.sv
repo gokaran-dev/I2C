@@ -3,7 +3,7 @@
 module I2C_system(
     input  logic clk,
     input  logic rst_n,   
-    output logic       clk_400, //use this pin to get clk_400 in TB
+    output logic clk_400, //use this pin to get clk_400 in TB. Must enable for simulation to work
 
     inout  tri SDA,
     inout  tri SCL, 
@@ -17,15 +17,17 @@ module I2C_system(
     input  logic [6:0] sub_addr,
     input  logic [7:0] master_data_in,
     output logic [7:0] master_data_out,
-    
-    /*output logic       master_ack_error,
+    /*
+    output logic       master_ack_error,
     output logic [3:0] master_state,
     output logic [2:0] master_addr_bit,
     output logic [2:0] master_data_bit,
     output logic [7:0] master_addr_reg,
     output logic [7:0] master_data_reg,
     output logic master_last_addr_bit,
-    output logic master_last_data_bit,*/
+    output logic master_last_data_bit,
+    output logic scl_en,
+    output logic scl_reg,*/
 
     //Subordinate 1
     input  logic [7:0] sub1_data_in,
@@ -144,7 +146,9 @@ module I2C_system(
         .SCL (SCL)
         
         //debugging signals 
-      /*.state_out (master_state),
+        /*.scl_en(scl_en),
+        .scl_reg(scl_reg),
+        .state_out (master_state),
         .data_bit (master_data_bit),
         .addr_bit (master_addr_bit),
         .addr_reg (master_addr_reg),
@@ -178,7 +182,7 @@ module I2C_system(
         .data_ready (sub1_data_ready)
         
         //debugging signals 
-       /*.done (sub1_done),
+        /*.done (sub1_done),
         .busy (sub1_busy),
         .data_reg (sub1_data_reg), 
         .addr_reg (sub1_addr_reg), 
@@ -218,7 +222,7 @@ module I2C_system(
         .data_ready (sub2_data_ready)
         
         //debugging signals
-       /*.done (sub2_done),
+        /*.done (sub2_done),
         .busy (sub2_busy),
         .data_reg (sub2_data_reg), 
         .addr_reg (sub2_addr_reg), 
