@@ -110,7 +110,7 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
         
         case(state) 
             ADDR_ACK:
-                if (SCL_d == 1'b0) begin //drive wen SCL is low
+                if (scl_posedge) begin //drive wen SCL is low
                 
                     if (addr_reg[7:1] == my_addr) 
                     begin
@@ -120,7 +120,7 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
                 end
                 
             SEND_DATA_ACK: begin
-                if (SCL_d == 1'b0) 
+                if (scl_posedge) 
                 begin
                     sda_oe  = 1'b1;
                     sda_out = 1'b0; 
@@ -135,7 +135,7 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
     end
     
     //FSM
-    always_ff @(posedge clk_400, negedge rst_n) 
+    always_ff @(posedge clk_400) 
     begin
        if (!rst_n)
        begin
@@ -313,7 +313,7 @@ module I2C_subordinate #(parameter my_addr = 7'b0000001) (
                 end
 
                 START: begin
-                    if (SCL_d == 1'b0) 
+                    if (scl_posedge) 
                         next_state = ADDR_RX;
                 end
                 
